@@ -57,7 +57,7 @@ func NewControl() *Control {
 
 func (c *Control) Start() {
 	c.timer.Start()
-	go c.PushMsgCron(time.Second * 3)
+	go c.PushMsgCron(time.Second * 10)
 }
 
 func (c *Control) Regist(conn *websocket.Conn) error {
@@ -71,7 +71,7 @@ func (c *Control) Regist(conn *websocket.Conn) error {
 		log.Printf("[Regist] c.regEpoll(wsConn) fail.")
 		return err
 	}
-	c.timer.Add(wsConn)
+
 	return nil
 }
 
@@ -88,15 +88,20 @@ func (c *Control) PushMsgCron(duration time.Duration) {
 		}
 		c.mu.RUnlock()
 
+		cnt := 0
+		errcnt := 0
 		for uid, conn := range tmp {
 			msg := fmt.Sprintf("hello user[%d], ts=%v", uid, time.Now().Format("2006/01/02 15:04:05"))
 			err := conn.PushMsgs([][]byte{[]byte(msg)})
 			if err != nil {
+				errcnt++
 				log.Printf("[PushMsgCron] call conn.PushMsg(), msg=%s, err=%s", msg, err)
+			} else {
+				cnt++
 			}
 		}
 		elasp := time.Since(start)
-		log.Printf("[PushMsgCron] PushMsgCron() finish, elasp=%v", elasp)
+		log.Printf("[PushMsgCron] PushMsgCron() finish, elasp=%v, total=%d, succ=%d, fail=%d.", elasp, len(tmp), cnt, errcnt)
 	}
 	log.Printf("[PushMsgCron] end.")
 }
@@ -146,6 +151,7 @@ func (c *Control) regEpoll(conn *WSConn) (err error) {
 	c.fds[wsFd] = conn
 	c.fds[evFd] = conn
 	c.conns[conn.id] = conn
+	c.timer.Add(conn)
 	return nil
 }
 
@@ -160,8 +166,12 @@ func (c *Control) unRegEpoll(conn *WSConn) (err error) {
 	if err != nil {
 		log.Printf("Faild to remove connection, err=%v", err)
 	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	c.timer.Remove(conn)
+
 	delete(c.fds, wsFd)
 	delete(c.fds, evFd)
 	delete(c.conns, conn.id)

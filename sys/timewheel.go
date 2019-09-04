@@ -8,6 +8,7 @@ import (
 type slot struct {
 	id       int
 	elements map[interface{}]interface{}
+	mu sync.RWMutex
 }
 
 func newSlot(id int) *slot {
@@ -17,14 +18,19 @@ func newSlot(id int) *slot {
 }
 
 func (s *slot) add(c interface{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.elements[c] = c
 }
 
 func (s *slot) remove(c interface{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	delete(s.elements, c)
 }
 
 type handler func(interface{})
+
 
 type TimeWheel struct {
 	tickDuration     time.Duration
@@ -34,7 +40,7 @@ type TimeWheel struct {
 	onTick           handler
 	wheel            []*slot
 	indicator        map[interface{}]*slot
-	sync.RWMutex
+	mu sync.RWMutex
 
 	taskChan chan interface{}
 	quitChan chan interface{}
@@ -51,7 +57,7 @@ func NewTimeWheel(tickDuration time.Duration, ticksPerWheel int, f handler) *Tim
 		ticksPerWheel:    ticksPerWheel,
 		onTick:           f,
 		currentTickIndex: 0,
-		taskChan:         make(chan interface{}),
+		taskChan:         make(chan interface{}, 100),
 		quitChan:         make(chan interface{}),
 	}
 	t.indicator = make(map[interface{}]*slot, 0)
@@ -74,14 +80,16 @@ func (t *TimeWheel) Add(c interface{}) {
 }
 
 func (t *TimeWheel) Remove(c interface{}) {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 	if v, ok := t.indicator[c]; ok {
 		v.remove(c)
 	}
 }
 
 func (t *TimeWheel) getPreviousTickIndex() int {
-	t.RLock()
-	defer t.RUnlock()
+	t.mu.RLock()
+	defer t.mu.RUnlock()
 
 	cti := t.currentTickIndex
 	if 0 == cti {
@@ -101,6 +109,7 @@ func (t *TimeWheel) run() {
 			t.ticker.Stop()
 			break
 		case <-t.ticker.C:
+
 			if t.ticksPerWheel == t.currentTickIndex {
 				t.currentTickIndex = 0
 			}
@@ -111,8 +120,8 @@ func (t *TimeWheel) run() {
 				delete(t.indicator, v)
 				t.onTick(v)
 			}
-
 			t.currentTickIndex++
+
 		case v := <-t.taskChan:
 			t.Remove(v)
 			slot := t.wheel[t.getPreviousTickIndex()]

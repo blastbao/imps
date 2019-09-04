@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -12,6 +13,13 @@ import (
 	"github.com/micro/grpc-go/logger"
 	"github.com/panjf2000/ants"
 )
+
+
+var (
+	connCnt = uint64(0)
+	failCnt = uint64(0)
+)
+
 
 type WSServer struct {
 	addr string
@@ -27,7 +35,7 @@ type WSServer struct {
 }
 
 func NewWSServer(addr string, port int, debug bool, debugPort int) *WSServer {
-	pool, _ := ants.NewPool(200000)
+	pool, _ := ants.NewPool(20000)
 	svr := &WSServer{
 		addr:       addr,
 		port:       port,
@@ -54,6 +62,14 @@ func (ws *WSServer) Run() {
 	go ws.Timer()
 	go ws.Start()
 
+
+	go func(){
+		for range time.Tick(time.Second*5){
+			log.Printf("[WSServer][Run] connCnt=%d, failCnt=%d", atomic.LoadUint64(&connCnt), atomic.LoadUint64(&failCnt))
+		}
+	}()
+
+
 	log.Printf("[WSServer][Run] ws server is running.")
 	http.HandleFunc("/", ws.HandleConnection)
 	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", ws.addr, ws.port), nil); err != nil {
@@ -70,6 +86,7 @@ func (ws *WSServer) Start() {
 	log.Printf("[WSServer][Start] websocket server Start.")
 STOP:
 	for {
+
 		// stop check
 		select {
 		case <-ws.stopChan:
@@ -84,7 +101,8 @@ STOP:
 			log.Printf("[WSServer][Start] Faild to sys wait %v", err)
 			continue
 		}
-		log.Printf("[WSServer][Start] len(fds) := %d", len(fds))
+
+		//log.Printf("[WSServer][Start] len(fds) := %d", len(fds))
 
 		// handle events
 		for _, fd := range fds {
@@ -128,14 +146,19 @@ func (ws *WSServer) HandleConnection(w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
 		return true
 	}}
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
+		atomic.AddUint64(&failCnt, 1 )
 		return
 	}
 	if err = ws.ctrl.Regist(conn); err != nil {
 		log.Printf("Faild to add connection")
 		conn.Close()
+		atomic.AddUint64(&failCnt, 1 )
+		return
 	}
+	atomic.AddUint64(&connCnt, 1 )
 }
 
 func (ws *WSServer) HandleEvent(fd int) (err error) {

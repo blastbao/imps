@@ -108,16 +108,29 @@ func (s *WSConn) HandleEvent(fd int) error {
 
 	switch fd {
 	case wsFd:
+
+		start := time.Now()
 		err = s.HandleHeartBeats()
 		if err != nil {
-			log.Printf("[HandleEvent] Faild to wsConn.HandleRequest(), err: %v", err)
+			log.Printf("[HandleEvent] s.HandleHeartBeats() failed, err: %v", err)
 			return err
 		}
+		elasp := time.Since(start)
+
+		if elasp > time.Second * 1 {
+			log.Printf("[HandleEvent] s.HandleHeartBeats() cost %v", elasp)
+		}
+
 	case evFd:
+		start := time.Now()
 		err = s.HandleMsgPush()
 		if err != nil {
-			log.Printf("[HandleEvent] Faild to wsConn.HandleMsgPush(), err: %v", err)
+			log.Printf("[HandleEvent] s.HandleMsgPush() failed, err: %v", err)
 			return err
+		}
+		elasp := time.Since(start)
+		if elasp > time.Second * 1 {
+			log.Printf("[HandleEvent] s.HandleMsgPush() cost %v", elasp)
 		}
 	default:
 		log.Printf("[HandleEvent] unknown fd")
@@ -154,6 +167,16 @@ func (s *WSConn) Release() bool {
 	return atomic.CompareAndSwapUint32(&s.state, CONN_BUSY, CONN_IDLE)
 }
 
+
+var (
+	rspMsg = model.Rsp{
+		Code: uint32(12306),
+		Msg:  fmt.Sprintf("Pong."),
+	}
+	content, _ = json.Marshal(rspMsg)
+)
+
+
 func (s *WSConn) HandleHeartBeats() error {
 	if err := s.TryLock(3); err != nil {
 		return err
@@ -162,11 +185,12 @@ func (s *WSConn) HandleHeartBeats() error {
 		s.Release()
 	}()
 
+
 	//log.Printf("[HandleHeartBeats] Start, conn.RemoteAddr=%v.", s.conn.RemoteAddr())
 
 	s.conn.SetReadLimit(readMaxSize)
 	_ = s.conn.SetReadDeadline(time.Now().Add(readTimeout))
-	_, msg, err := s.conn.ReadMessage()
+	_, _, err := s.conn.ReadMessage()
 	if err != nil {
 		log.Printf("[HandleHeartBeats] Faild to ReadMessage(), %v", err)
 		return err
@@ -174,31 +198,33 @@ func (s *WSConn) HandleHeartBeats() error {
 
 	//log.Printf("[HandleHeartBeats] wsMsgType=%d, wsMsg=%s, err=%s.", msgType, msg, err)
 
-	req := new(model.Req)
-	err = json.Unmarshal(msg, req)
-	if err != nil {
-		log.Printf("[HandleHeartBeats] Faild to json.Unmarshal(msg, req), %v", err)
-		return err
-	}
+	//req := new(model.Req)
+	//err = json.Unmarshal(msg, req)
+	//if err != nil {
+	//	log.Printf("[HandleHeartBeats] Faild to json.Unmarshal(msg, req), %v", err)
+	//	return err
+	//}
 
 	//log.Printf("[HandleHeartBeats] receive msg `%s` from client `%s`", req.Msg, s.conn.RemoteAddr())
 
-	rspMsg := model.Rsp{
-		Code: uint32(12306),
-		Msg:  fmt.Sprintf("Pong."),
-	}
+	//rspMsg := model.Rsp{
+	//	Code: uint32(12306),
+	//	Msg:  fmt.Sprintf("Pong."),
+	//}
 
-	content, err := json.Marshal(rspMsg)
-	if err != nil {
-		log.Printf("[HandleHeartBeats] Faild to json.Marshal(msg), %v", err)
-		return err
-	}
+	//content, err := json.Marshal(rspMsg)
+	//if err != nil {
+	//	log.Printf("[HandleHeartBeats] Faild to json.Marshal(rspMsg), %v", err)
+	//	return err
+	//}
 
 	s.ctrl.timer.Add(s)
 	s.lastPing = time.Now()
+
+	_ = s.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
 	err = s.conn.WriteMessage(websocket.TextMessage, content)
 	if err != nil {
-		log.Printf("[HandleHeartBeats] Faild to json.Unmarshal(msg, req), %v", err)
+		log.Printf("[HandleHeartBeats] s.conn.WriteMessage() failed, %v", err)
 		return err
 	}
 
@@ -268,7 +294,7 @@ func (s *WSConn) TryLock(retry int) error {
 
 func (s *WSConn) PushMsgs(msgs [][]byte) error {
 
-	if err := s.TryLock(1); err != nil {
+	if err := s.TryLock(3); err != nil {
 		return err
 	}
 	defer s.Release()

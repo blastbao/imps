@@ -15,12 +15,9 @@ import (
 type Control struct {
 	*sys.Epoll
 	id uint64
-
 	conns map[uint64]*WSConn
 	fds   map[int]*WSConn
-
 	timer *sys.TimeWheel
-
 	mu sync.RWMutex
 }
 
@@ -83,7 +80,15 @@ func (c *Control) PushMsgCron(duration time.Duration) {
 	log.Printf("[PushMsgCron] start.")
 	for range time.Tick(duration) {
 		start := time.Now()
+
+		c.mu.RLock()
+		tmp := make(map[uint64]*WSConn, len(c.conns))
 		for uid, conn := range c.conns {
+			tmp[uid] = conn
+		}
+		c.mu.RUnlock()
+
+		for uid, conn := range tmp {
 			msg := fmt.Sprintf("hello user[%d], ts=%v", uid, time.Now().Format("2006/01/02 15:04:05"))
 			err := conn.PushMsgs([][]byte{[]byte(msg)})
 			if err != nil {

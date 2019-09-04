@@ -38,7 +38,7 @@ func (e *Epoll) Resume(fd int) error {
 }
 
 func (e *Epoll) Wait() ([]int, error) {
-	events := make([]unix.EpollEvent, 100)
+	events := make([]unix.EpollEvent, 1000)
 	n, err := unix.EpollWait(e.fd, events, -1) // -1 为不设超时
 	if err != nil {
 		return nil, err

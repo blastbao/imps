@@ -45,16 +45,16 @@ func (ws *WSServer) Run() {
 	if ws.debug {
 		go func() {
 			if err := http.ListenAndServe(fmt.Sprintf("%s:%d", ws.addr, ws.debugPort), nil); err != nil {
-				log.Printf("pprof failed: %v", err)
+				log.Printf("[WSServer][Run] start pprof failed, err: %v", err)
 			}
-			log.Printf("pprof is running.")
+			log.Printf("[WSServer][Run] pprof is running.")
 		}()
 	}
 
 	go ws.Timer()
 	go ws.Start()
 
-	log.Printf("ws server is running.")
+	log.Printf("[WSServer][Run] ws server is running.")
 	http.HandleFunc("/", ws.HandleConnection)
 	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", ws.addr, ws.port), nil); err != nil {
 		log.Fatal(err)
@@ -67,13 +67,13 @@ func (ws *WSServer) Stop() {
 }
 
 func (ws *WSServer) Start() {
-	log.Printf("[Start] websocket server Start.")
+	log.Printf("[WSServer][Start] websocket server Start.")
 STOP:
 	for {
 		// stop check
 		select {
 		case <-ws.stopChan:
-			log.Printf("[Start] receive stop signal.")
+			log.Printf("[WSServer][Start] receive stop signal.")
 			break STOP
 		default:
 		}
@@ -81,31 +81,30 @@ STOP:
 		// epoll wait
 		fds, err := ws.ctrl.Wait()
 		if err != nil {
-			log.Printf("[Start] Faild to sys wait %v", err)
+			log.Printf("[WSServer][Start] Faild to sys wait %v", err)
 			continue
 		}
-		log.Printf("[Start] len(fds) := %d", len(fds))
+		log.Printf("[WSServer][Start] len(fds) := %d", len(fds))
 
 		// handle events
 		for _, fd := range fds {
 			fd := fd // variable copy, avoid share the common conn.
-			log.Printf("[Start] fd = %d", fd)
+			//log.Printf("[Start] fd = %d", fd)
 			err = ws.workerPool.Submit(func() {
 				ws.HandleEvent(fd)
 			})
 			if err != nil {
-				logger.Errorf("[Start] ws.workerPool.Submit() fail: %s", err)
+				logger.Errorf("[WSServer][Start] ws.workerPool.Submit() fail: %s", err)
 			}
 		}
 	}
-
-	log.Printf("[Start] websocket server end.")
+	log.Printf("[WSServer][Start] websocket server end.")
 }
 
 func (ws *WSServer) Timer() {
-	log.Printf("[Timer] Start.")
+	log.Printf("[WSServer][Timer] Start.")
 
-	taskDuration := time.Duration(time.Second * time.Duration(5))
+	taskDuration := time.Duration(time.Minute * time.Duration(5))
 	timer := time.NewTicker(taskDuration)
 	defer timer.Stop()
 
@@ -114,18 +113,18 @@ STOP:
 	for {
 		select {
 		case <-ws.stopChan:
-			log.Printf("[Timer] receive stop signal.")
+			log.Printf("[WSServer][Timer] receive stop signal.")
 			break STOP
 		case <-timer.C:
-			log.Printf("[Timer] ticker arrive.")
+			log.Printf("[WSServer][Timer] ticker arrive.")
 		}
 	}
 
-	log.Printf("[Timer] End.")
+	log.Printf("[WSServer][Timer] End.")
 }
 
 func (ws *WSServer) HandleConnection(w http.ResponseWriter, r *http.Request) {
-	log.Printf("Connect to server")
+	//log.Printf("Connect to server")
 	upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
 		return true
 	}}
@@ -133,7 +132,6 @@ func (ws *WSServer) HandleConnection(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-
 	if err = ws.ctrl.Regist(conn); err != nil {
 		log.Printf("Faild to add connection")
 		conn.Close()
@@ -174,7 +172,7 @@ func (ws *WSServer) HandleEvent(fd int) (err error) {
 		return err
 	}
 
-	log.Printf("[HandleEvent] WSConn Info: %v", wsConn)
+	//log.Printf("[HandleEvent] WSConn Info: %v", wsConn)
 	return nil
 }
 

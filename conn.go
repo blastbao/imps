@@ -102,9 +102,6 @@ func (s *WSConn) String() string {
 }
 
 func (s *WSConn) HandleEvent(fd int) error {
-
-	log.Printf("[HandleEvent] access, WSConn: %v", s)
-
 	var err error
 	wsFd := s.GetWebSocketFd()
 	evFd := s.GetEventFd()
@@ -126,8 +123,6 @@ func (s *WSConn) HandleEvent(fd int) error {
 		log.Printf("[HandleEvent] unknown fd")
 		return err
 	}
-
-	log.Printf("[HandleEvent] finish, WSConn: %v", s)
 	return nil
 }
 
@@ -167,17 +162,17 @@ func (s *WSConn) HandleHeartBeats() error {
 		s.Release()
 	}()
 
-	log.Printf("[HandleHeartBeats] Start, conn.RemoteAddr=%v.", s.conn.RemoteAddr())
+	//log.Printf("[HandleHeartBeats] Start, conn.RemoteAddr=%v.", s.conn.RemoteAddr())
 
 	s.conn.SetReadLimit(readMaxSize)
 	_ = s.conn.SetReadDeadline(time.Now().Add(readTimeout))
-	msgType, msg, err := s.conn.ReadMessage()
+	_, msg, err := s.conn.ReadMessage()
 	if err != nil {
 		log.Printf("[HandleHeartBeats] Faild to ReadMessage(), %v", err)
 		return err
 	}
 
-	log.Printf("[HandleHeartBeats] wsMsgType=%d, wsMsg=%s, err=%s.", msgType, msg, err)
+	//log.Printf("[HandleHeartBeats] wsMsgType=%d, wsMsg=%s, err=%s.", msgType, msg, err)
 
 	req := new(model.Req)
 	err = json.Unmarshal(msg, req)
@@ -186,7 +181,7 @@ func (s *WSConn) HandleHeartBeats() error {
 		return err
 	}
 
-	log.Printf("[HandleHeartBeats] receive msg `%s` from client `%s`", req.Msg, s.conn.RemoteAddr())
+	//log.Printf("[HandleHeartBeats] receive msg `%s` from client `%s`", req.Msg, s.conn.RemoteAddr())
 
 	rspMsg := model.Rsp{
 		Code: uint32(12306),
@@ -207,7 +202,7 @@ func (s *WSConn) HandleHeartBeats() error {
 		return err
 	}
 
-	log.Printf("[HandleHeartBeats] end.")
+	//log.Printf("[HandleHeartBeats] end.")
 	return nil
 }
 
@@ -217,15 +212,16 @@ func (s *WSConn) HandleMsgPush() error {
 	}
 	defer s.Release()
 
-	log.Printf("[HandleMsgPush] Start.")
+	//log.Printf("[HandleMsgPush] Start.")
 
-	events, err := s.eventFd.ReadEvents()
+	//events, err := s.eventFd.ReadEvents()
+	_, err := s.eventFd.ReadEvents()
 	if err != nil {
 		log.Printf("[HandleMsgPush] Faild to s.eventFd.ReadEvents(), %v", err)
 		return err
 	}
 
-	log.Printf("[HandleMsgPush] s.eventFd.ReadEvents() succ, events=%d", events)
+	//log.Printf("[HandleMsgPush] s.eventFd.ReadEvents() succ, events=%d", events)
 
 	msgs := <-s.sendCh
 
@@ -247,10 +243,10 @@ func (s *WSConn) HandleMsgPush() error {
 			log.Printf("[HandleMsgPush] Faild to json.Unmarshal(msg, req), %v", err)
 			continue
 		}
-		log.Printf("[HandleMsgPush] send msg `%s` to client `%s`", req.Msg, s.conn.RemoteAddr())
+		//log.Printf("[HandleMsgPush] send msg `%s` to client `%s`", req.Msg, s.conn.RemoteAddr())
 	}
 
-	log.Printf("[HandleMsgPush] end.")
+	//log.Printf("[HandleMsgPush] end.")
 	return nil
 }
 
@@ -258,7 +254,7 @@ func (s *WSConn) TryLock(retry int) error {
 	for r := 0; r < retry; r++ {
 		if s.IsClosed() {
 			//log.Printf("[TryLock] s.IsClosed() return true, so return err.")
-			return errors.New("[TryLock] connection is closed")
+			return errors.New("connection is closed")
 		}
 		res := s.Occupy()
 		if res {
@@ -267,7 +263,7 @@ func (s *WSConn) TryLock(retry int) error {
 		}
 		time.Sleep(time.Millisecond * 10)
 	}
-	return errors.New("[TryLock] timeout")
+	return errors.New("TryLock() timeout")
 }
 
 func (s *WSConn) PushMsgs(msgs [][]byte) error {
@@ -277,13 +273,13 @@ func (s *WSConn) PushMsgs(msgs [][]byte) error {
 	}
 	defer s.Release()
 
-	log.Printf("[PushMsg] Start.")
+	//log.Printf("[PushMsg] Start.")
 	s.sendCh <- msgs
 	err := s.eventFd.WriteEvents(uint64(len(msgs)))
 	if err != nil {
 		log.Printf("[PushMsg] Faild to s.eventFd.WriteEvents(1), %v", err)
 		return err
 	}
-	log.Printf("[PushMsg] end.")
+	//log.Printf("[PushMsg] end.")
 	return nil
 }

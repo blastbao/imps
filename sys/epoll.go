@@ -8,8 +8,8 @@ import (
 )
 
 type Epoll struct {
-	fd          int
-	lock        *sync.RWMutex
+	fd   int
+	lock *sync.RWMutex
 }
 
 func MakeEpoll() (*Epoll, error) {

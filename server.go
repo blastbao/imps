@@ -45,7 +45,7 @@ func (ws *WSServer) Run() {
 	if ws.debug {
 		go func() {
 			if err := http.ListenAndServe(fmt.Sprintf("%s:%d", ws.addr, ws.debugPort), nil); err != nil {
-				log.Fatalf("pprof failed: %v", err)
+				log.Printf("pprof failed: %v", err)
 			}
 			log.Printf("pprof is running.")
 		}()
@@ -65,7 +65,6 @@ func (ws *WSServer) Stop() {
 	ws.workerPool.Release()
 	close(ws.stopChan)
 }
-
 
 func (ws *WSServer) Start() {
 	log.Printf("[Start] websocket server Start.")
@@ -145,38 +144,37 @@ func (ws *WSServer) HandleEvent(fd int) (err error) {
 
 	wsConn, err := ws.ctrl.GetWSConnByFd(fd)
 	if err != nil {
-		log.Fatalf("[HandleEvent] ws.ctrl.GetWSConnByFd(fd) faild, err: %v", err)
+		log.Printf("[HandleEvent] ws.ctrl.GetWSConnByFd(fd) faild, err: %v", err)
 		err = ws.ctrl.Remove(fd)
 		if err != nil {
-			log.Fatalf("[HandleEvent] ws.ctrl.Remove(fd) faild, err: %v", err)
+			log.Printf("[HandleEvent] ws.ctrl.Remove(fd) faild, err: %v", err)
 		}
 		return err
 	}
 
 	defer func() {
 		if err != nil {
-			log.Fatalf("[HandleEvent] err != nil, should Deregist and Close conn, conn=%v.", wsConn.conn.RemoteAddr())
+			log.Printf("[HandleEvent] err != nil, should Deregist and Close conn, conn=%v.", wsConn.conn.RemoteAddr())
 			err = ws.ctrl.Deregist(wsConn)
 			log.Printf("[HandleEvent] ws.ctrl.Deregist(wsConn) success, err=%v.", err)
 			err = wsConn.Close()
-			log.Fatalf("[HandleEvent] wsConn.Close() success, err=%v.", err)
+			log.Printf("[HandleEvent] wsConn.Close() success, err=%v.", err)
 		}
 	}()
 
 	err = wsConn.HandleEvent(fd)
 	if err != nil {
-		log.Fatalf("[HandleEvent] wsConn.HandleEvent(fd) faild, err: %v", err)
+		log.Printf("[HandleEvent] wsConn.HandleEvent(fd) faild, err: %v", err)
 		return err
 	}
 
 	err = ws.ctrl.Resume(fd)
 	if err != nil {
-		log.Fatalf("[HandleEvent] ws.ctrl.Resume(fd) faild , err: %v", err)
+		log.Printf("[HandleEvent] ws.ctrl.Resume(fd) faild , err: %v", err)
 		return err
 	}
 
 	log.Printf("[HandleEvent] WSConn Info: %v", wsConn)
-
 	return nil
 }
 

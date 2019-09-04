@@ -1,0 +1,55 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "YdGi91Ni8IlbfOVEtCu2XHpBwX4=",
+			"path": "github.com/gorilla/websocket",
+			"revision": "7c8e298727d149d7c329b4dec7e94e1932ac5c11",
+			"revisionTime": "2018-12-18T07:24:45Z"
+		},
+		{
+			"checksumSHA1": "2JH1DF82SAPY1JzD1iG4U7GZUcQ=",
+			"path": "github.com/json-iterator/go",
+			"revision": "5bc93205020f6311d7e4a34f82c5616a18ec35e5",
+			"revisionTime": "2019-02-08T07:56:42Z"
+		},
+		{
+			"checksumSHA1": "YKUwbMJBilfdYTKD8XW0zdiACZs=",
+			"path": "github.com/micro/grpc-go/logger",
+			"revision": "549af9fb4bf2916bac8bf54e2cca13f803b74694",
+			"revisionTime": "2019-01-30T16:01:15Z"
+		},
+		{
+			"checksumSHA1": "ZTcgWKWHsrX0RXYVXn5Xeb8Q0go=",
+			"path": "github.com/modern-go/concurrent",
+			"revision": "bacd9c7ef1dd9b15be4a9909b8ac7a4e313eec94",
+			"revisionTime": "2018-03-06T01:26:44Z"
+		},
+		{
+			"checksumSHA1": "qvH48wzTIV3QKSDqI0dLFtVjaDI=",
+			"path": "github.com/modern-go/reflect2",
+			"revision": "94122c33edd36123c84d5368cfb2b69df93a0ec8",
+			"revisionTime": "2018-07-18T01:23:57Z"
+		},
+		{
+			"checksumSHA1": "RNsAU/lxlrS5tkZIuLZW3iU3sHc=",
+			"path": "github.com/panjf2000/ants",
+			"revision": "89644d035c8dc3281168003a0c183a1fb97a24c2",
+			"revisionTime": "2019-09-03T01:29:26Z"
+		},
+		{
+			"checksumSHA1": "lFULPHzDCUyLqXZc4Fzi7bIOsow=",
+			"path": "golang.org/x/sys/unix",
+			"revision": "6c81ef8f67ca3f42fc9cd71dfbd5f35b0c4b5771",
+			"revisionTime": "2019-03-18T07:51:36Z"
+		},
+		{
+			"checksumSHA1": "LGcHsIoKmKZO2gfN/g+UWm9AfC0=",
+			"path": "gopkg.in/gin-gonic/gin.v1/json",
+			"revision": "b869fe1415e4b9eb52f247441830d502aece2d4d",
+			"revisionTime": "2018-08-14T08:58:52Z"
+		}
+	],
+	"rootPath": "github.com/blastbao/imps"
+}

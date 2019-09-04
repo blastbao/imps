@@ -23,7 +23,7 @@ type WSServer struct {
 	stopChan chan struct{}
 
 	workerPool *ants.Pool
-	wsConns    *WSConns
+	ctrl       *Control
 }
 
 func NewWSServer(addr string, port int, debug bool, debugPort int) *WSServer {
@@ -34,7 +34,7 @@ func NewWSServer(addr string, port int, debug bool, debugPort int) *WSServer {
 		debug:      debug,
 		debugPort:  debugPort,
 		stopChan:   make(chan struct{}, 1),
-		wsConns:    NewWSConns(),
+		ctrl:       NewControl(),
 		workerPool: pool,
 	}
 	return svr
@@ -51,8 +51,8 @@ func (ws *WSServer) Run() {
 		}()
 	}
 
-	go ws.timer()
-	go ws.start()
+	go ws.Timer()
+	go ws.Start()
 
 	log.Printf("ws server is running.")
 	http.HandleFunc("/", ws.HandleConnection)
@@ -66,43 +66,44 @@ func (ws *WSServer) Stop() {
 	close(ws.stopChan)
 }
 
-func (ws *WSServer) start() {
-	log.Printf("[start] websocket server start.")
+
+func (ws *WSServer) Start() {
+	log.Printf("[Start] websocket server Start.")
 STOP:
 	for {
 		// stop check
 		select {
 		case <-ws.stopChan:
-			log.Printf("[start] receive stop signal.")
+			log.Printf("[Start] receive stop signal.")
 			break STOP
 		default:
 		}
 
 		// epoll wait
-		conns, err := ws.wsConns.Wait()
+		fds, err := ws.ctrl.Wait()
 		if err != nil {
-			log.Printf("[start] Faild to sys wait %v", err)
+			log.Printf("[Start] Faild to sys wait %v", err)
 			continue
 		}
-		log.Printf("[start] len(conns) := %d", len(conns))
+		log.Printf("[Start] len(fds) := %d", len(fds))
 
 		// handle events
-		for _, conn := range conns {
-			conn := conn // variable copy, avoid share the common conn.
-			log.Printf("[start] conn.RemoteAddr = %s", conn.RemoteAddr())
+		for _, fd := range fds {
+			fd := fd // variable copy, avoid share the common conn.
+			log.Printf("[Start] fd = %d", fd)
 			err = ws.workerPool.Submit(func() {
-				ws.HandleRequest(conn)
+				ws.HandleEvent(fd)
 			})
 			if err != nil {
-				logger.Errorf("[start] ws.workerPool.Submit() fail: %s", err)
+				logger.Errorf("[Start] ws.workerPool.Submit() fail: %s", err)
 			}
 		}
 	}
 
-	log.Printf("[start] websocket server end.")
+	log.Printf("[Start] websocket server end.")
 }
 
-func (ws *WSServer) timer() {
+func (ws *WSServer) Timer() {
 	log.Printf("[Timer] Start.")
 
 	taskDuration := time.Duration(time.Second * time.Duration(5))
@@ -133,42 +134,48 @@ func (ws *WSServer) HandleConnection(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	if err = ws.wsConns.Regist(conn); err != nil {
+
+	if err = ws.ctrl.Regist(conn); err != nil {
 		log.Printf("Faild to add connection")
 		conn.Close()
 	}
 }
 
-func (ws *WSServer) HandleRequest(conn *websocket.Conn) (err error) {
+func (ws *WSServer) HandleEvent(fd int) (err error) {
+
+	wsConn, err := ws.ctrl.GetWSConnByFd(fd)
+	if err != nil {
+		log.Fatalf("[HandleEvent] ws.ctrl.GetWSConnByFd(fd) faild, err: %v", err)
+		err = ws.ctrl.Remove(fd)
+		if err != nil {
+			log.Fatalf("[HandleEvent] ws.ctrl.Remove(fd) faild, err: %v", err)
+		}
+		return err
+	}
 
 	defer func() {
 		if err != nil {
-			log.Printf("[handleConn] err != nil, should Deregist and Close conn, conn=%v.", conn.RemoteAddr())
-			err = ws.wsConns.Deregist(conn)
-			log.Printf("[handleConn] Deregist conn success, err=%v.", err)
-			err = conn.Close()
-			log.Printf("[handleConn] close conn success, err=%v.", err)
+			log.Fatalf("[HandleEvent] err != nil, should Deregist and Close conn, conn=%v.", wsConn.conn.RemoteAddr())
+			err = ws.ctrl.Deregist(wsConn)
+			log.Printf("[HandleEvent] ws.ctrl.Deregist(wsConn) success, err=%v.", err)
+			err = wsConn.Close()
+			log.Fatalf("[HandleEvent] wsConn.Close() success, err=%v.", err)
 		}
 	}()
 
-	wsConn, err := ws.wsConns.GetWSConn(conn)
+	err = wsConn.HandleEvent(fd)
 	if err != nil {
-		log.Printf("[handleConn] Faild to wsConns.GetWSConn(), err: %v", err)
-		return err
-	}
-	//log.Printf("[handleConn] WSConn Info: %v", wsConn)
-
-	err = wsConn.HandleRequest()
-	if err != nil {
-		log.Printf("[handleConn] Faild to wsConn.HandleRequest(), err: %v", err)
+		log.Fatalf("[HandleEvent] wsConn.HandleEvent(fd) faild, err: %v", err)
 		return err
 	}
 
-	err = ws.wsConns.Resume(conn)
+	err = ws.ctrl.Resume(fd)
 	if err != nil {
-		log.Printf("[handleConn] Faild to wsConns.Resume(), err: %v", err)
+		log.Fatalf("[HandleEvent] ws.ctrl.Resume(fd) faild , err: %v", err)
 		return err
 	}
+
+	log.Printf("[HandleEvent] WSConn Info: %v", wsConn)
 
 	return nil
 }

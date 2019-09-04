@@ -1,12 +1,12 @@
 package utils
 
 import (
-	"github.com/Broadroad/gpool"
-	"github.com/gorilla/websocket"
 	"log"
 	"net"
 	"net/url"
 	"strconv"
+
+	"github.com/gorilla/websocket"
 )
 
 var (

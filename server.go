@@ -14,12 +14,10 @@ import (
 	"github.com/panjf2000/ants"
 )
 
-
 var (
 	connCnt = uint64(0)
 	failCnt = uint64(0)
 )
-
 
 type WSServer struct {
 	addr string

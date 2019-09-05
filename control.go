@@ -17,7 +17,7 @@ type Control struct {
 	id uint64
 	conns map[uint64]*WSConn
 	fds   map[int]*WSConn
-	timer *sys.TimeWheel
+	//timer *sys.TimeWheel
 	mu sync.RWMutex
 }
 
@@ -35,20 +35,20 @@ func NewControl() *Control {
 	//	c.Close()
 	//})
 
-	// 每个 tick 为 100 s ， 36 个为 1h，也即控制超时为 1h。
-	timer := sys.NewTimeWheel(time.Second*100, 36, func(data interface{}) {
-		c := data.(*WSConn)
-		log.Printf("[sys.NewTimeWheel] connection timeout, conn=%v", c)
-		c.ctrl.Deregist(c)
-		c.Close()
-	})
+	//// 每个 tick 为 100 s ， 36 个为 1h，也即控制超时为 1h。
+	//timer := sys.NewTimeWheel(time.Second*100, 36, func(data interface{}) {
+	//	c := data.(*WSConn)
+	//	log.Printf("[sys.NewTimeWheel] connection timeout, conn=%v", c)
+	//	c.ctrl.Deregist(c)
+	//	c.Close()
+	//})
 
 	ctrl := &Control{
 		Epoll: epoll,
 		id:    0,
 		conns: make(map[uint64]*WSConn),
 		fds:   make(map[int]*WSConn),
-		timer: timer,
+		//timer: timer,
 	}
 
 	ctrl.Start()
@@ -56,8 +56,8 @@ func NewControl() *Control {
 }
 
 func (c *Control) Start() {
-	c.timer.Start()
-	go c.PushMsgCron(time.Second * 10)
+	//c.timer.Start()
+	go c.PushMsgCron(time.Second * 3)
 }
 
 func (c *Control) Regist(conn *websocket.Conn) error {
@@ -92,7 +92,7 @@ func (c *Control) PushMsgCron(duration time.Duration) {
 		errcnt := 0
 		for uid, conn := range tmp {
 			msg := fmt.Sprintf("hello user[%d], ts=%v", uid, time.Now().Format("2006/01/02 15:04:05"))
-			err := conn.PushMsgs([][]byte{[]byte(msg)})
+			err := conn.PushMsg([]byte(msg))
 			if err != nil {
 				errcnt++
 				log.Printf("[PushMsgCron] call conn.PushMsg(), msg=%s, err=%s", msg, err)
@@ -151,7 +151,7 @@ func (c *Control) regEpoll(conn *WSConn) (err error) {
 	c.fds[wsFd] = conn
 	c.fds[evFd] = conn
 	c.conns[conn.id] = conn
-	c.timer.Add(conn)
+	//c.timer.Add(conn)
 	return nil
 }
 
@@ -170,7 +170,7 @@ func (c *Control) unRegEpoll(conn *WSConn) (err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.timer.Remove(conn)
+	//c.timer.Remove(conn)
 
 	delete(c.fds, wsFd)
 	delete(c.fds, evFd)

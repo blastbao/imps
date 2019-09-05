@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/blastbao/imps-gr/proto"
 	"log"
 	"reflect"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/blastbao/imps/model"
 	"github.com/blastbao/imps/sys"
 	"github.com/gorilla/websocket"
 )
@@ -34,7 +34,7 @@ type WSConn struct {
 	state uint32
 
 	ctrl   *Control
-	sendCh chan [][]byte
+	sendCh chan []byte
 }
 
 func NewWSConn(ctrl *Control, id uint64, c *websocket.Conn) (*WSConn, error) {
@@ -51,7 +51,7 @@ func NewWSConn(ctrl *Control, id uint64, c *websocket.Conn) (*WSConn, error) {
 		wsFd:      wsFd,
 		eventFd:   evfd,
 		state:     0,
-		sendCh:    make(chan [][]byte, 10),
+		sendCh:    make(chan []byte, 10),
 		ctrl:      ctrl,
 	}
 	return wsConn, nil
@@ -93,6 +93,7 @@ func (s *WSConn) Close() error {
 		return err
 	}
 	close(s.sendCh)
+	s.sendCh = nil
 	return nil
 }
 
@@ -167,15 +168,13 @@ func (s *WSConn) Release() bool {
 	return atomic.CompareAndSwapUint32(&s.state, CONN_BUSY, CONN_IDLE)
 }
 
-
 var (
-	rspMsg = model.Rsp{
-		Code: uint32(12306),
-		Msg:  fmt.Sprintf("Pong."),
+	rsp = proto.HeartBeatRsp{
+		Code: 0,
+		Msg:  "Pong",
 	}
-	content, _ = json.Marshal(rspMsg)
+	Rsp, err = json.Marshal(rsp)
 )
-
 
 func (s *WSConn) HandleHeartBeats() error {
 	if err := s.TryLock(3); err != nil {
@@ -184,7 +183,6 @@ func (s *WSConn) HandleHeartBeats() error {
 	defer func() {
 		s.Release()
 	}()
-
 
 	//log.Printf("[HandleHeartBeats] Start, conn.RemoteAddr=%v.", s.conn.RemoteAddr())
 
@@ -218,11 +216,11 @@ func (s *WSConn) HandleHeartBeats() error {
 	//	return err
 	//}
 
-	s.ctrl.timer.Add(s)
+	//s.ctrl.timer.Add(s)
 	s.lastPing = time.Now()
 
 	_ = s.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-	err = s.conn.WriteMessage(websocket.TextMessage, content)
+	err = s.conn.WriteMessage(websocket.TextMessage, Rsp)
 	if err != nil {
 		log.Printf("[HandleHeartBeats] s.conn.WriteMessage() failed, %v", err)
 		return err
@@ -231,6 +229,8 @@ func (s *WSConn) HandleHeartBeats() error {
 	//log.Printf("[HandleHeartBeats] end.")
 	return nil
 }
+
+
 
 func (s *WSConn) HandleMsgPush() error {
 	if err := s.TryLock(3); err != nil {
@@ -249,30 +249,24 @@ func (s *WSConn) HandleMsgPush() error {
 
 	//log.Printf("[HandleMsgPush] s.eventFd.ReadEvents() succ, events=%d", events)
 
-	msgs := <-s.sendCh
+	msg := <-s.sendCh
 
-	for _, msg := range msgs {
-		req := model.Req{
-			Op:  uint32(999),
-			Msg: string(msg),
-		}
-
-		content, err := json.Marshal(req)
-		if err != nil {
-			log.Printf("[HandleMsgPush] Faild to json.Marshal(msg), %v", err)
-			continue
-		}
-
-		_ = s.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
-		err = s.conn.WriteMessage(websocket.TextMessage, content)
-		if err != nil {
-			log.Printf("[HandleMsgPush] Faild to json.Unmarshal(msg, req), %v", err)
-			continue
-		}
-		//log.Printf("[HandleMsgPush] send msg `%s` to client `%s`", req.Msg, s.conn.RemoteAddr())
+	pushMsg := proto.Message{
+		Type: proto.PushMsg,
+		Body :msg,
 	}
 
-	//log.Printf("[HandleMsgPush] end.")
+	pushMsgBytes, err := json.Marshal(pushMsg)
+	if err != nil {
+		log.Printf("[HandleMsgPush] Faild to json.Marshal(msg), %v", err)
+		return err
+	}
+	_ = s.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+	err = s.conn.WriteMessage(websocket.TextMessage, pushMsgBytes)
+	if err != nil {
+		log.Printf("[HandleMsgPush] Faild to json.Unmarshal(msg, req), %v", err)
+		return err
+	}
 	return nil
 }
 
@@ -292,20 +286,11 @@ func (s *WSConn) TryLock(retry int) error {
 	return errors.New("TryLock() timeout")
 }
 
-func (s *WSConn) PushMsgs(msgs [][]byte) error {
-
-	if err := s.TryLock(3); err != nil {
-		return err
+func (s *WSConn) PushMsg(msg []byte) error {
+	select {
+	case s.sendCh <- msg:
+	default:
+		return errors.New("send chan is full")
 	}
-	defer s.Release()
-
-	//log.Printf("[PushMsg] Start.")
-	s.sendCh <- msgs
-	err := s.eventFd.WriteEvents(uint64(len(msgs)))
-	if err != nil {
-		log.Printf("[PushMsg] Faild to s.eventFd.WriteEvents(1), %v", err)
-		return err
-	}
-	//log.Printf("[PushMsg] end.")
-	return nil
+	return s.eventFd.WriteEvents(1)
 }
